@@ -10,6 +10,7 @@
 #include <mutex>
 #include <queue>
 #include <atomic>
+#include <windows.h>
 
 // ========== SHA256 IMPLEMENTACE ==========
 #include <cstring>
@@ -169,6 +170,22 @@ std::unordered_map<std::string, std::string> loadDatabase(const std::string& dbP
     return db;
 }
 
+// Disc type identification
+void discType(std::string& disc) {
+    std::string discType = "Unknown";
+    
+    std::cout << "[DEBUG] Disc type: " << discType << std::endl;
+
+    // TODO: Implement function that get disc type (HDD, SSD, etc.)
+}
+
+// Show all discs
+void showAllDisc() {
+    std::cout << "[DEBUG] Listing all discs..." << std::endl;
+
+    // TODO: Implement function that lists all discs
+}
+
 
 std::atomic<int> totalScanned(0);
 std::atomic<int> cleanCount(0);
@@ -290,10 +307,12 @@ void scanDirectory(const std::string& path) {
 
 // Function for scanning disks
 void scanDisc(const std::string& disc) {
+    // TODO: Implement disc scanning logic
     std::cout << "[DEBUG] Scanning disk: " << disc << std::endl;
 }
 
 void scanAll() {
+    // TODO: Implement all disks scanning logic
     std::cout << "[DEBUG] Scanning all disks..." << std::endl;
 }
 
@@ -326,6 +345,7 @@ int main() {
 
         switch (choice) {
         case 1:
+            // Scan file
             std::cout << std::endl;
             std::cout << "Path to file: ";
             std::cin >> path;
@@ -335,6 +355,7 @@ int main() {
 
             break;
         case 2:
+            // Scan directory
             std::cout << std::endl;
             std::cout << "Path to directory: ";
             std::cin >> path;
@@ -344,8 +365,10 @@ int main() {
 
             break;
         case 3:
+            // Scan disk
             std::cout << std::endl;
-            std::cout << "Disk to scan (example: C:): ";
+            showAllDisc();
+            std::cout << "Choose a disc: ";
             std::cin >> path;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
@@ -353,12 +376,14 @@ int main() {
 
             break;
         case 4:
+            // Scan all disks
             std::cout << std::endl;
 
             scanAll();
 
             break;
         case 99:
+            // Exit
             std::cout << std::endl;
             std::cout << "Goodbye!!!";
             std::cin.get();
