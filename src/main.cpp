@@ -170,22 +170,16 @@ std::unordered_map<std::string, std::string> loadDatabase(const std::string& dbP
     return db;
 }
 
-// Disc type identification
-void discType(std::string& disc) {
-    std::string discType = "Unknown";
+
+// Check if path is disc
+bool isDrive(const std::string& path) {
+    // Cesta musí končit zpětným lomítkem
+    std::string drivePath = path;
     
-    std::cout << "[DEBUG] Disc type: " << discType << std::endl;
 
-    // TODO: Implement function that get disc type (HDD, SSD, etc.)
+    UINT type = GetDriveTypeA(drivePath.c_str());
+    return (type == DRIVE_FIXED || type == DRIVE_REMOVABLE || type == DRIVE_CDROM || type == DRIVE_REMOTE);
 }
-
-// Show all discs
-void showAllDisc() {
-    std::cout << "[DEBUG] Listing all discs..." << std::endl;
-
-    // TODO: Implement function that lists all discs
-}
-
 
 std::atomic<int> totalScanned(0);
 std::atomic<int> cleanCount(0);
@@ -227,7 +221,7 @@ std::mutex queueMutex;
 std::queue<std::string> filesQueue;
 bool showCleanStatus = true;  // default true
 
-void workerThread(const std::unordered_map<std::string, std::string>& db) {
+void workerThreadDirectory(const std::unordered_map<std::string, std::string>& db) {
     while (true) {
         std::string file;
 
@@ -289,7 +283,7 @@ void scanDirectory(const std::string& path) {
     std::cout << "Using " << threadCount << " threads..." << std::endl;
 
     for (int i = 0; i < threadCount; ++i) {
-        threads.emplace_back(workerThread, std::ref(db));
+        threads.emplace_back(workerThreadDirectory, std::ref(db));
     }
 
     for (auto& t : threads) {
@@ -305,10 +299,92 @@ void scanDirectory(const std::string& path) {
 }
 
 
+// Worker thread for Disc
+void workerThreadDisc(const std::unordered_map<std::string, std::string>& db) {
+    while (true) {
+        std::string file;
+
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            if (filesQueue.empty()) {
+                break; // nic nezbylo ke zpracování
+            }
+            file = filesQueue.front();
+            filesQueue.pop();
+        }
+
+        int scannedNow = ++totalScanned;
+
+        std::string fileHash = SHA256::hashFile(file);
+
+        auto it = db.find(fileHash);
+        if (it != db.end()) {
+            ++infectedCount;
+            {
+                std::lock_guard<std::mutex> lock(coutMutex);
+                std::cout << "Infected: " << file << " : " << it->second << std::endl;
+            }
+        }
+        else {
+            ++cleanCount;
+        }
+
+        if (scannedNow % 1000 == 0) {
+            std::lock_guard<std::mutex> lock(coutMutex);
+            std::cout << "[+] Progress: " << scannedNow << " files scanned, "
+                      << infectedCount.load() << " infected detected." << std::endl;
+        }
+    }
+}
+
+
 // Function for scanning disks
 void scanDisc(const std::string& disc) {
-    // TODO: Implement disc scanning logic
-    std::cout << "[DEBUG] Scanning disk: " << disc << std::endl;
+    // TODO: Use WinAPI instead of std::filesystem for disk scanning
+
+    if (!fs::exists(disc)) {
+        std::cout << "[-] Disc not found!" << std::endl;
+    }
+    
+    if (!isDrive(disc)) {
+        std::cout << "[-] The provided path is not a disc!" << std::endl;
+    }
+
+    std::cout << "Scanning disc: " << disc << std::endl;
+
+    std::cout << "[*] Indexing files on disk: " << disc << std::endl;
+
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(disc, fs::directory_options::skip_permission_denied, ec), end; it != end; it.increment(ec)) {
+        if (ec) continue; // přeskočíme nepřístupné nebo chybové položky
+
+        std::error_code file_ec;
+        if (fs::is_regular_file(it->status(file_ec)) && !file_ec) {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            filesQueue.push(it->path().string());
+        }
+    }
+
+    std::cout << "[*] Files found on disk: " << filesQueue.size() << std::endl;
+
+    const int threadCount = std::thread::hardware_concurrency();
+    std::vector<std::thread> threads;
+    auto db = loadDatabase("VirusDataBaseHash.bav");
+
+    std::cout << "[*] Starting scan using " << threadCount << " threads..." << std::endl;
+
+    for (int i = 0; i < threadCount; ++i) {
+        threads.emplace_back(workerThreadDisc, std::ref(db));
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    std::cout << "[+] Finished scanning disk: " << disc << std::endl;
+    std::cout << "    Total files scanned: " << totalScanned.load() << std::endl;
+    std::cout << "    Clean files:         " << cleanCount.load() << std::endl;
+    std::cout << "    Infected files:      " << infectedCount.load() << std::endl;
 }
 
 void scanAll() {
@@ -367,10 +443,12 @@ int main() {
         case 3:
             // Scan disk
             std::cout << std::endl;
-            showAllDisc();
             std::cout << "Choose a disc: ";
             std::cin >> path;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            if (path.back() != '\\') {
+                path += '\\'; // Ensure the path ends with a backslash
+            }
 
             scanDisc(path);
 
