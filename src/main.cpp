@@ -181,6 +181,26 @@ bool isDrive(const std::string& path) {
     return (type == DRIVE_FIXED || type == DRIVE_REMOVABLE || type == DRIVE_CDROM || type == DRIVE_REMOTE);
 }
 
+// Get all drives
+std::vector<std::wstring> getAllDrives() {
+    DWORD drives = GetLogicalDrives();
+    std::vector<std::wstring> driveList;
+
+    for (char i = 0; i < 26; ++i) {
+        if (drives & (1 << i)) {
+            wchar_t root[] = { static_cast<wchar_t>('A' + i), L':', L'\\', L'\0' };
+
+            // Kontrola typu disku - pouze pevné disky a vyměnitelné jednotky
+            UINT type = GetDriveTypeW(root);
+            if (type == DRIVE_FIXED || type == DRIVE_REMOVABLE) {
+                driveList.push_back(root);
+            }
+        }
+    }
+
+    return driveList;
+}
+
 // Index files using WinAPI
 void indexFilesWinAPI(const std::wstring& directory, std::queue<std::string>& filesQueue, std::mutex& queueMutex) {
     std::wstring searchPath = directory + L"\\*";
@@ -369,8 +389,6 @@ void workerThreadDisc(const std::unordered_map<std::string, std::string>& db) {
 
 // Function for scanning disks
 void scanDisc(const std::string& disc) {
-    // TODO: Use WinAPI instead of std::filesystem for disk scanning
-
     if (!fs::exists(disc)) {
         std::cout << "[-] Disc not found!" << std::endl;
     }
@@ -409,8 +427,50 @@ void scanDisc(const std::string& disc) {
 }
 
 void scanAll() {
-    // TODO: Implement all disks scanning logic
-    std::cout << "[DEBUG] Scanning all disks..." << std::endl;
+    std::queue<std::string> filesQueue;
+    std::mutex queueMutex;
+
+    std::vector<std::wstring> drives = getAllDrives();
+
+    std::wcout << L"[*] Indexing discs and files on discs" << std::endl;
+    for (const auto& drive : drives) {
+        std::wcout << L" - " << drive << L"\n";
+        indexFilesWinAPI(drive, filesQueue, queueMutex);
+    }
+
+    std::cout << "[*] Files found: " << filesQueue.size() << std::endl;
+
+    // Scan all files in the queue
+    while (true) {
+        std::string filePath;
+
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            if (filesQueue.empty()) break;
+
+            filePath = filesQueue.front();
+            filesQueue.pop();
+        }
+
+        const int threadCount = std::thread::hardware_concurrency();
+        std::vector<std::thread> threads;
+        auto db = loadDatabase("VirusDataBaseHash.bav");
+
+        std::cout << "[*] Starting scan using " << threadCount << " threads..." << std::endl;
+
+        for (int i = 0; i < threadCount; ++i) {
+            threads.emplace_back(workerThreadDisc, std::ref(db));
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        std::cout << "[+] Finished scanning all discs" << std::endl;
+        std::cout << "    Total files scanned: " << totalScanned.load() << std::endl;
+        std::cout << "    Clean files:         " << cleanCount.load() << std::endl;
+        std::cout << "    Infected files:      " << infectedCount.load() << std::endl;
+    }
 }
 
 void showMenu() {
@@ -491,6 +551,11 @@ int main() {
             std::cout << "Invalid option !" << std::endl;
             break;
         }
+
+        totalScanned = 0;
+        cleanCount = 0;
+        infectedCount = 0;
+        filesQueue = std::queue<std::string>(); // Clear the queue for the next scan
     }
 
     std::cout << "Goodbye!!!" << std::endl;
