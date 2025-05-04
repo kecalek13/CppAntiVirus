@@ -20,4 +20,4 @@ This program I am making in Visual Studio Code
 ## Contributing to this project
 Please fork this project and contribute to it.
 <br>
-I will be happy for every contribution.
+I will be happy for every contribution and star of course.
