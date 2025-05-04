@@ -230,11 +230,10 @@ void indexFilesWinAPI(const std::wstring& directory, std::queue<std::string>& fi
     FindClose(hFind);
 }
 
+std::atomic<int> totalFiles(0);
 std::atomic<int> totalScanned(0);
 std::atomic<int> cleanCount(0);
 std::atomic<int> infectedCount(0);
-
-
 
 
 // Function for scanning files
@@ -268,7 +267,7 @@ void scanFile(const std::string& path, const bool& showCleanStatus) {
 std::mutex coutMutex;
 std::mutex queueMutex;
 std::queue<std::string> filesQueue;
-bool showCleanStatus = true;  // default true
+std::queue<std::string> infectedFiles;
 
 void workerThreadDirectory(const std::unordered_map<std::string, std::string>& db) {
     while (true) {
@@ -281,7 +280,7 @@ void workerThreadDirectory(const std::unordered_map<std::string, std::string>& d
             filesQueue.pop();
         }
 
-        ++totalScanned;
+        int scannedNow = ++totalScanned;
 
         std::string fileHash = SHA256::hashFile(file);
 
@@ -290,14 +289,32 @@ void workerThreadDirectory(const std::unordered_map<std::string, std::string>& d
             ++infectedCount;
             {
                 std::lock_guard<std::mutex> lock(coutMutex);
-                std::cout << "Infected: " << file << " : " << it->second << std::endl;
+                if (totalFiles < 1000){
+                    std::cout << "Infected: " << file << " : " << it->second << std::endl;
+                }
+                infectedFiles.push(file + " : " + it->second);
             }
         }
         else {
             ++cleanCount;
-            if (showCleanStatus) {
-                std::lock_guard<std::mutex> lock(coutMutex);
-                std::cout << "Clean: " << file << std::endl;
+            if (totalFiles >= 1000 && totalFiles < 100000) {
+                if (scannedNow % 1000 == 0) {
+                    std::lock_guard<std::mutex> lock(coutMutex);
+                    std::cout << "[+] Progress: " << totalScanned << " files scanned, "
+                              << infectedCount.load() << " infected detected." << std::endl;
+                }
+            } else if (totalFiles >= 100000) {
+                if (scannedNow % 10000 == 0) {
+                    std::lock_guard<std::mutex> lock(coutMutex);
+                    std::cout << "[+] Progress: " << totalScanned << " files scanned, "
+                              << infectedCount.load() << " infected detected." << std::endl;
+                }
+
+            } else {
+                {
+                    std::lock_guard<std::mutex> lock(coutMutex);
+                    std::cout << "Clean: " << file << std::endl;
+                }
             }
         }
     }
@@ -316,12 +333,8 @@ void scanDirectory(const std::string& path) {
 
     std::cout << "Indexing files..." << std::endl;
 
-    for (const auto& entry : fs::recursive_directory_iterator(path)) {
-        if (fs::is_regular_file(entry.status())) {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            filesQueue.push(entry.path().string());
-        }
-    }
+    indexFilesWinAPI(std::wstring(path.begin(), path.end()), filesQueue, queueMutex);
+    totalFiles = filesQueue.size();
 
     std::cout << "Files found: " << filesQueue.size() << std::endl;
 
@@ -345,6 +358,15 @@ void scanDirectory(const std::string& path) {
     std::cout << "Total files scanned:   " << totalScanned.load() <<
         "   Clean files:   " << cleanCount.load() <<
         "   Infected files:   " << infectedCount.load() << std::endl;
+    std::cout << std::endl;
+
+    std::cout << "Infected files:" << std::endl;
+    while (!infectedFiles.empty()) {
+        std::cout << "Infected: " << infectedFiles.front() << std::endl;
+        infectedFiles.pop();
+    }
+
+    std::cout << std::endl;
 }
 
 
@@ -356,7 +378,7 @@ void workerThreadDisc(const std::unordered_map<std::string, std::string>& db) {
         {
             std::lock_guard<std::mutex> lock(queueMutex);
             if (filesQueue.empty()) {
-                break; // nic nezbylo ke zpracování
+                break; // nothing to scan
             }
             file = filesQueue.front();
             filesQueue.pop();
@@ -372,16 +394,25 @@ void workerThreadDisc(const std::unordered_map<std::string, std::string>& db) {
             {
                 std::lock_guard<std::mutex> lock(coutMutex);
                 std::cout << "Infected: " << file << " : " << it->second << std::endl;
+                infectedFiles.push(file + " : " + it->second);
             }
         }
         else {
             ++cleanCount;
         }
 
-        if (scannedNow % 1000 == 0) {
-            std::lock_guard<std::mutex> lock(coutMutex);
-            std::cout << "[+] Progress: " << scannedNow << " files scanned, "
-                      << infectedCount.load() << " infected detected." << std::endl;
+        if (totalFiles >= 100000) {
+            if (scannedNow % 10000 == 0) {
+                std::lock_guard<std::mutex> lock(coutMutex);
+                std::cout << "[+] Progress: " << totalScanned << " files scanned, "
+                          << infectedCount.load() << " infected detected." << std::endl;
+            }
+        } else {
+            if (scannedNow % 1000 == 0) {
+                std::lock_guard<std::mutex> lock(coutMutex);
+                std::cout << "[+] Progress: " << totalScanned << " files scanned, "
+                          << infectedCount.load() << " infected detected." << std::endl;
+            }
         }
     }
 }
@@ -403,6 +434,7 @@ void scanDisc(const std::string& disc) {
 
     std::wstring wideDisc = std::wstring(disc.begin(), disc.end());
     indexFilesWinAPI(wideDisc, filesQueue, queueMutex);
+    totalFiles = filesQueue.size();
 
     std::cout << "[*] Files found on disk: " << filesQueue.size() << std::endl;
 
@@ -424,6 +456,15 @@ void scanDisc(const std::string& disc) {
     std::cout << "    Total files scanned: " << totalScanned.load() << std::endl;
     std::cout << "    Clean files:         " << cleanCount.load() << std::endl;
     std::cout << "    Infected files:      " << infectedCount.load() << std::endl;
+    std::cout << std::endl;
+
+    std::cout << "Infected files:" << std::endl;
+    while (!infectedFiles.empty()) {
+        std::cout << "Infected: " << infectedFiles.front() << std::endl;
+        infectedFiles.pop();
+    }
+
+    std::cout << std::endl;
 }
 
 void scanAll() {
@@ -470,6 +511,15 @@ void scanAll() {
         std::cout << "    Total files scanned: " << totalScanned.load() << std::endl;
         std::cout << "    Clean files:         " << cleanCount.load() << std::endl;
         std::cout << "    Infected files:      " << infectedCount.load() << std::endl;
+        std::cout << std::endl;
+
+        std::cout << "Infected files:" << std::endl;
+        while (!infectedFiles.empty()) {
+            std::cout << "Infected: " << infectedFiles.front() << std::endl;
+            infectedFiles.pop();
+        }
+        
+        std::cout << std::endl;
     }
 }
 
@@ -552,10 +602,12 @@ int main() {
             break;
         }
 
+        totalFiles = 0;
         totalScanned = 0;
         cleanCount = 0;
         infectedCount = 0;
         filesQueue = std::queue<std::string>(); // Clear the queue for the next scan
+        infectedFiles = std::queue<std::string>(); // Clear the infected files list for the next scan
     }
 
     std::cout << "Goodbye!!!" << std::endl;
