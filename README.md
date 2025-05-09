@@ -10,11 +10,15 @@ This program I am making in Visual Studio Code
    ```
 2. Go to CppAntiVirus
    ```
-    cd CppAntiVirus
+    cd CppAntiVirus/src/
    ```
-4. Build it using g++
+3. Build main.cpp using g++. PS: output file must name C++AntivirusEngine.exe
    ```
-    g++ main.cpp -o main.exe
+    g++ main.cpp -o C++AntivirusEngine.exe
+   ```
+4. Start GUI.py using python
+   ```
+    python GUI.py
    ```
 
 ## Contributing to this project
