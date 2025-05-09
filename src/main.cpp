@@ -523,94 +523,93 @@ void scanAll() {
     }
 }
 
-void showMenu() {
-    std::cout << std::endl;
-    std::cout << "==============================  C++ Antivirus  ==============================" << std::endl;
-    std::cout << "                                                       Developed by Kecalek13" << std::endl;
-    std::cout << std::endl;
-    std::cout << std::endl;
-    std::cout << "[1] Scan File" << std::endl;
-    std::cout << "[2] Scan Directory" << std::endl;
-    std::cout << "[3] Scan Disc" << std::endl;
-    std::cout << "[4] Scan All" << std::endl;
-    std::cout << std::endl;
-    std::cout << "[99] Exit" << std::endl;
-    std::cout << std::endl;
-    std::cout << std::endl;
-}
 
-int main() {
-    int choice;
-    std::string path;
-
-    while (true) {
-        showMenu();
-
-        std::cout << "Choose option: ";
-        std::cin >> choice;
-        std::cout << std::endl;
-
-        switch (choice) {
-        case 1:
-            // Scan file
-            std::cout << std::endl;
-            std::cout << "Path to file: ";
-            std::cin >> path;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-            scanFile(path, true);
-
-            break;
-        case 2:
-            // Scan directory
-            std::cout << std::endl;
-            std::cout << "Path to directory: ";
-            std::cin >> path;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-            scanDirectory(path);
-
-            break;
-        case 3:
-            // Scan disk
-            std::cout << std::endl;
-            std::cout << "Choose a disc: ";
-            std::cin >> path;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            if (path.back() != '\\') {
-                path += '\\'; // Ensure the path ends with a backslash
-            }
-
-            scanDisc(path);
-
-            break;
-        case 4:
-            // Scan all disks
-            std::cout << std::endl;
-
-            scanAll();
-
-            break;
-        case 99:
-            // Exit
-            std::cout << std::endl;
-            std::cout << "Goodbye!!!";
-            std::cin.get();
-            return 0;
-        default:
-            std::cout << "Invalid option !" << std::endl;
-            break;
-        }
-
-        totalFiles = 0;
-        totalScanned = 0;
-        cleanCount = 0;
-        infectedCount = 0;
-        filesQueue = std::queue<std::string>(); // Clear the queue for the next scan
-        infectedFiles = std::queue<std::string>(); // Clear the infected files list for the next scan
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cout << "Usage: " << std::endl;
+        std::cout << " C++AntivirusEngine.exe --scan-file <path>" << std::endl;
+        std::cout << " C++AntivirusEngine.exe --scan-dir <path>" << std::endl;
+        std::cout << " C++AntivirusEngine.exe --scan-disk <drive>" << std::endl;
+        std::cout << " C++AntivirusEngine.exe --scan-all -" << std::endl;
+        
+        return 1;
     }
+    
+    std::string choice = argv[1];
+    std::string path = argv[2];
 
-    std::cout << "Goodbye!!!" << std::endl;
-    std::cin.get();
+    if (choice == "--scan-file") {
+        scanFile(path, true);
+    } else if (choice == "--scan-dir") {
+        scanDirectory(path);
+    } else if (choice == "--scan-disk") {
+        scanDisc(path);
+    } else if (choice == "--scan-all") {
+        scanAll();
+    } else {
+        std::cout << "Invalid option!" << std::endl;
+        return 1;
+    }
+    
+    // switch (choice) {
+    // case 1:
+    //     // Scan file
+    //     std::cout << std::endl;
+    //     std::cout << "Path to file: ";
+    //     std::cin >> path;
+    //     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    //     scanFile(path, true);
+
+    //     break;
+    // case 2:
+    //     // Scan directory
+    //     std::cout << std::endl;
+    //     std::cout << "Path to directory: ";
+    //     std::cin >> path;
+    //     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    //     scanDirectory(path);
+
+    //     break;
+    // case 3:
+    //     // Scan disk
+    //     std::cout << std::endl;
+    //     std::cout << "Choose a disc: ";
+    //     std::cin >> path;
+    //     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    //     if (path.back() != '\\') {
+    //         path += '\\'; // Ensure the path ends with a backslash
+    //     }
+
+    //     scanDisc(path);
+
+    //     break;
+    // case 4:
+    //     // Scan all disks
+    //     std::cout << std::endl;
+
+    //     scanAll();
+
+    //     break;
+    // case 99:
+    //     // Exit
+    //     std::cout << std::endl;
+    //     std::cout << "Goodbye!!!";
+    //     std::cin.get();
+    //     return 0;
+    // default:
+    //     std::cout << "Invalid option !" << std::endl;
+    //     break;
+    // }
+
+    totalFiles = 0;
+    totalScanned = 0;
+    cleanCount = 0;
+    infectedCount = 0;
+    filesQueue = std::queue<std::string>(); // Clear the queue for the next scan
+    infectedFiles = std::queue<std::string>(); // Clear the infected files list for the next scan
+
+
     return 0;
 }
